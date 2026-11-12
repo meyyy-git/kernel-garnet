@@ -46,7 +46,7 @@ jobs:
           [ -n "$ack_sha" ] || { echo "Cabang ACK $KERNEL_BRANCH tidak ditemukan"; exit 1; }
           if [ -z "$KSU_REF" ]; then
             KSU_REF=$(git ls-remote --tags --refs --sort=-v:refname "$KSU_REPO" 'v*' \
-              | grep -v legacy | head -n1 | sed 's@.*refs/tags/@@')
+              | grep -v legacy | sed 's@.*refs/tags/@@' | awk 'NR==1')  # awk, bukan head: head memutus pipa dan pipefail menggagalkan langkah
           fi
           [ -n "$KSU_REF" ] || { echo "Tag KernelSU-Next tidak ditemukan"; exit 1; }
           tag="$KERNEL_BRANCH-$ack_sha-ksu-$KSU_REF"
