@@ -162,6 +162,8 @@ jobs:
           done
           # Kalau pemeriksaan ini masih ada, layar HyperOS berkedip (lihat patches/SOURCE.txt).
           ! grep -q 'valid clone check' drivers/gpu/drm/drm_atomic_helper.c
+          # ADIOS asli crash di 5.10 (NULL data->hctx di limit_depth); pastikan versi yang diperbaiki.
+          ! grep -q 'to_word_depth' block/adios.c
           for e in $EXPERIMENTS; do
             [ -f "../repo/experiments/$e.patch" ] || [ -f "../repo/experiments/$e.config" ] \
               || { echo "Percobaan tidak dikenal: $e"; exit 1; }
@@ -183,6 +185,8 @@ jobs:
           printf 'CONFIG_KSU=y\nCONFIG_KPM=y\nCONFIG_KSU_SUSFS=y\n' >> arch/arm64/configs/gki_defconfig
           # TCP BBR sebagai default: satu-satunya opsi performa umum yang belum ada di gki_defconfig.
           printf 'CONFIG_TCP_CONG_ADVANCED=y\nCONFIG_TCP_CONG_BBR=y\nCONFIG_DEFAULT_BBR=y\n' >> arch/arm64/configs/gki_defconfig
+          # ADIOS tersedia sebagai pilihan; ROM tetap memasang bfq saat boot.
+          printf 'CONFIG_MQ_IOSCHED_ADIOS=y\n' >> arch/arm64/configs/gki_defconfig
           # Nama kernel di uname: 5.10.x-android12-9-Equinox-r<nomor build>. Bagian "android12-9"
           # dipertahankan karena manager root membaca KMI dari sana. Yang perlu lolos deteksi
           # bisa menyamarkannya lewat fitur spoof uname SUSFS.
@@ -199,7 +203,7 @@ jobs:
             done < "../repo/experiments/$e.config"
           done
           # Tanpa salah satu opsi ini, modul vendor stok ditolak atau kernel panic saat boot.
-          for opt in KSU KPM KSU_SUSFS CFI_CLANG SHADOW_CALL_STACK LTO_CLANG_THIN MODVERSIONS; do
+          for opt in KSU KPM KSU_SUSFS MQ_IOSCHED_ADIOS CFI_CLANG SHADOW_CALL_STACK LTO_CLANG_THIN MODVERSIONS; do
             grep -q "^CONFIG_$opt=y" out/.config || { echo "CONFIG_$opt tidak aktif"; exit 1; }
           done
           grep -q '^CONFIG_DEFAULT_TCP_CONG="bbr"' out/.config || { echo "BBR bukan default"; exit 1; }
@@ -263,6 +267,7 @@ jobs:
           - **Root hiding:** SUSFS ${{ steps.build.outputs.susfs_version }}
           - **Network:** TCP BBR as the default congestion control
           - **Display:** HyperOS flicker fix (reverts "drm: Add valid clones check")
+          - **Storage:** ADIOS I/O scheduler v3.3.0, fixed for 5.10. Optional: HyperOS keeps \`bfq\` until you switch (see the README)
           - **Toolchain:** official AOSP \`$CLANG\`, with CFI, SCS and ThinLTO enabled
 
           ### Install
@@ -276,7 +281,7 @@ jobs:
 
           ### Before you flash
           - A release titled **[UNTESTED]** has been compiled but not yet booted on a device.
-          - Tested ROM: HyperOS 3 (Android 16). Other ROMs are untested.
+          - Tested ROM: HyperOS 3.0.315.0 CN (Android 16). Other HyperOS versions on garnet share the same kernel interface (\`android12-5.10\`, KMI 9) and should work, but are untested. Please report your results.
           - You flash at your own risk. Keep a \`boot\` backup and a PC with fastboot at hand.
 
           ### Sources

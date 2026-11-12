@@ -13,6 +13,7 @@ Balanced by design: it stays close to the stock kernel and changes only what is 
 | Root hiding | [SUSFS](https://gitlab.com/simonpunk/susfs4ksu) |
 | Network | TCP BBR as the default congestion control |
 | Display | HyperOS flicker fix |
+| Storage | ADIOS I/O scheduler, optional (see below) |
 | Toolchain | Official AOSP clang `r416183b`, with CFI, SCS and ThinLTO enabled |
 
 Only the kernel image inside `boot` is replaced. Vendor modules, `vendor_boot` and `dtbo` stay stock.
@@ -20,7 +21,8 @@ Only the kernel image inside `boot` is replaced. Vendor modules, `vendor_boot` a
 ## Compatibility
 
 - **Device:** `garnet` only. The installer refuses other devices.
-- **Tested ROM:** HyperOS 3 (Android 16). Other ROMs are untested.
+- **Tested ROM:** HyperOS 3.0.315.0 CN (Android 16).
+- **Other HyperOS versions on garnet** (1.x, 2.x, Global or CN, ports) use the same kernel interface (`android12-5.10`, KMI generation 9), so Equinox should boot there too. This is untested. If you try it, please open an issue with your ROM version and whether it booted.
 - **Bootloader:** must be unlocked.
 
 ## Install
@@ -50,6 +52,18 @@ Use `boot_b` if your active slot is `b`.
 | *(none)* | Booted and checked on a real device |
 | `[UNTESTED]` | Compiled, not yet booted on a device |
 | `[DO NOT FLASH]` | Known to fail on a device. Kept for reference only |
+
+## ADIOS I/O scheduler
+
+Equinox ships ADIOS v3.3.0 with a fix for kernel 5.10. The upstream code reads `data->hctx` in `limit_depth`, which 5.10 has not set yet at that point, so the kernel crashes on the first write. In our tests on garnet the fixed version wrote about 15-40% faster than `bfq`; read speed was about the same.
+
+HyperOS selects `bfq` at boot, so ADIOS stays unused until you switch to it. From a root shell:
+
+```
+for q in /sys/block/sd*/queue; do echo adios > $q/scheduler; done
+```
+
+This lasts until reboot. To keep it, run the same line from a boot script such as `/data/adb/service.d/adios.sh` once `sys.boot_completed` is `1`.
 
 ## Kernel name and root detection
 

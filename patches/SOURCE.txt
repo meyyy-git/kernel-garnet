@@ -11,11 +11,18 @@ ACK diperbarui, build berhenti.
     Terbukti di garnet 12 Nov 2026: tanpa patch ini log kernel berisi
     "crtc104 failed valid clone check for mask 0x3"; di kernel yang membatalkannya 0 kegagalan.
 
+0002-adios.patch
+    I/O scheduler ADIOS v3.3.0 (commit 05006c9b5f 8d52d83f0e d066aa3cf6 0afca57889 9fd9e34896
+    c031af35c4), ditambah perbaikan sendiri: adios_limit_depth tidak lagi memakai data->hctx
+    (di 5.10 belum diisi saat limit_depth dipanggil; versi asli oops NULL di setiap penulisan,
+    terbukti di build r18). limit_depth kini mengikuti mq-deadline 5.10 dan to_word_depth dihapus.
+    Diuji di build r21: 7 menit + tulis 1 GB paralel, 0 crash; tulis 706-711 MB/s vs bfq 504-616.
+    Tidak jadi default; ROM tetap memasang bfq.
+
 Yang pernah dicoba lalu dicabut (jangan dimasukkan lagi tanpa uji fastboot boot):
-    I/O scheduler ADIOS v3.2.0 (commit 05006c9b5f 8d52d83f0e d066aa3cf6 0afca57889 9fd9e34896).
-        Begitu diaktifkan di UFS garnet, penulisan macet: kworker flush dan f2fs_ckpt tertahan
-        di status D, load naik di atas 100, reboot biasa ikut tertahan (build r15, 12 Nov 2026).
-    Governor schedhorizon (commit 2afc3cddbb).
-        Saat Encore memasangnya, sistem merayap sampai boot tidak selesai (build r13).
+    I/O scheduler ADIOS v3.2.0 tanpa perbaikan: penulisan macet (build r15). Penyebabnya bug
+        limit_depth yang sama dengan v3.3.0; lihat 0002-adios.patch.
+    Governor schedhorizon (commit 2afc3cddbb). Dulu dikira membuat r13 merayap; ternyata
+        penyebabnya ADIOS v3.2.0. Lolos uji sendirian di r19; kini ada di experiments/.
     Toolchain clang-r536225 (clang 19).
         Kernel mati dalam beberapa detik, dengan atau tanpa patch (build r14).
