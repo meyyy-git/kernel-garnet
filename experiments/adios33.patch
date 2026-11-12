@@ -31,10 +31,10 @@ index b9db5d4..0ee8757 100644
  
 diff --git a/block/adios.c b/block/adios.c
 new file mode 100644
-index 0000000..fc52094
+index 0000000..cff3150
 --- /dev/null
 +++ b/block/adios.c
-@@ -0,0 +1,1985 @@
+@@ -0,0 +1,1983 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * Adaptive Deadline I/O Scheduler (ADIOS)
@@ -847,13 +847,6 @@ index 0000000..fc52094
 +}
 +
 +// Convert a queue depth to the corresponding word depth for shallow allocation
-+static int to_word_depth(struct blk_mq_hw_ctx *hctx, unsigned int qdepth) {
-+	struct sbitmap_queue *bt = hctx->sched_tags->bitmap_tags;
-+	const unsigned int nrr = hctx->queue->nr_requests;
-+
-+	return ((qdepth << bt->sb.shift) + nrr - 1) / nrr;
-+}
-+
 +// We limit the depth of request allocation for asynchronous and write requests
 +static void adios_limit_depth(unsigned int opf, struct blk_mq_alloc_data *data) {
 +	struct adios_data *ad = data->q->elevator->elevator_data;
@@ -862,7 +855,12 @@ index 0000000..fc52094
 +	if (op_is_sync(opf) && !op_is_write(opf))
 +		return;
 +
-+	data->shallow_depth = to_word_depth(data->hctx, ad->async_depth);
++	/*
++	 * On 5.10, __blk_mq_alloc_request() calls limit_depth before data->hctx is
++	 * set, so the per-hctx word depth used upstream cannot be computed here
++	 * (it dereferenced a NULL hctx). Follow 5.10 mq-deadline instead.
++	 */
++	data->shallow_depth = ad->async_depth;
 +}
 +
 +// The number of requests in the queue was notified from the block layer

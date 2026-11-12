@@ -7,6 +7,12 @@ Uji selalu lewat `fastboot boot`, jangan langsung di-flash.
 adios33       I/O scheduler ADIOS v3.3.0 dari ramabondanp/android_kernel_common-5.10
               (commit 05006c9b5f 8d52d83f0e d066aa3cf6 0afca57889 9fd9e34896 c031af35c4).
               v3.2.0 membuat penulisan macet di UFS garnet (build r15).
+              v3.3.0 apa adanya crash (build r18, 12 Nov 2026): NULL pointer di
+              adios_limit_depth+0x3c, dari blk_mq_submit_bio, begitu ADIOS diaktifkan.
+              Sebab: di 5.10 limit_depth dipanggil sebelum data->hctx diisi, sedangkan
+              kode ADIOS (ditulis untuk 6.x) memakai data->hctx. Tree asalnya pun masih
+              membawa bug ini. Patch di sini sudah diperbaiki: limit_depth mengikuti
+              mq-deadline 5.10 (shallow_depth = async_depth) dan to_word_depth dihapus.
 schedhorizon  Governor cpufreq schedhorizon, commit 2afc3cddbb dari tree yang sama.
               Pernah dicurigai membuat sistem merayap (build r13), tapi r13 juga membawa
               ADIOS v3.2.0, jadi penyebabnya belum terpisah.
