@@ -1,4 +1,4 @@
-name: Build kernel garnet
+name: Build Equinox Kernel
 
 # Kernel GKI android12-5.10 untuk garnet:
 #   Google ACK + SukiSU Ultra (cabang builtin) + SUSFS + KPM.
@@ -188,18 +188,36 @@ jobs:
           export PATH="$PWD/clang/bin:$PATH"
           cd kernel
           make -j"$(nproc)" $MAKE_ARGS Image
-          echo "release=$(make -s $MAKE_ARGS kernelrelease)" >> "$GITHUB_OUTPUT"
-          echo "susfs_version=$(sed -n 's/^#define SUSFS_VERSION "\(.*\)"/\1/p' include/linux/susfs.h)" >> "$GITHUB_OUTPUT"
-          cp out/arch/arm64/boot/Image "$GITHUB_WORKSPACE/Image"
           release=$(make -s $MAKE_ARGS kernelrelease)
+          kver=$(make -s $MAKE_ARGS kernelversion)
+          susfs_version=$(sed -n 's/^#define SUSFS_VERSION "\(.*\)"/\1/p' include/linux/susfs.h)
+          # Nama build: Equinox-garnet-<versi kernel>-r<nomor build>. Sengaja tidak masuk ke
+          # uname, karena nama custom di sana diperiksa aplikasi pendeteksi root.
+          name="Equinox-garnet-$kver-r$GITHUB_RUN_NUMBER"
+          {
+            echo "release=$release"
+            echo "susfs_version=$susfs_version"
+            echo "name=$name"
+          } >> "$GITHUB_OUTPUT"
+          cp out/arch/arm64/boot/Image "$GITHUB_WORKSPACE/Image"
           cd "$GITHUB_WORKSPACE"
           # Installer AnyKernel3: flash lewat manager root atau recovery.
           git clone --depth=1 https://github.com/osm0sis/AnyKernel3 ak3
           rm -rf ak3/.git ak3/.github ak3/README.md
-          cp repo/anykernel/anykernel.sh ak3/anykernel.sh
+          cp repo/anykernel/anykernel.sh repo/anykernel/banner ak3/
+          # File `version` ditampilkan AnyKernel3 di bawah banner saat instalasi.
+          {
+            echo "  Build    : $name"
+            echo "  Date     : $(date -u '+%Y-%m-%d %H:%M UTC')"
+            echo "  Kernel   : $release"
+            echo "  Root     : SukiSU Ultra ${{ steps.ver.outputs.ksu }} + KPM"
+            echo "  Hiding   : SUSFS $susfs_version"
+            echo "  Compiler : $CLANG"
+          } > ak3/version
+          cat ak3/banner ak3/version
           cp Image ak3/Image
-          (cd ak3 && zip -qr9 "../kernel-garnet-$release-AnyKernel3.zip" . -x '*placeholder')
-          sha256sum Image kernel-garnet-*-AnyKernel3.zip ksu_module_susfs.zip | tee SHA256SUMS
+          (cd ak3 && zip -qr9 "../$name-AnyKernel3.zip" . -x '*placeholder')
+          sha256sum Image Equinox-*-AnyKernel3.zip ksu_module_susfs.zip | tee SHA256SUMS
 
       - name: Rilis
         if: steps.ver.outputs.skip != 'true'
@@ -210,8 +228,9 @@ jobs:
           tag="${{ steps.ver.outputs.tag }}"
           gh release view "$tag" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
           gh release create "$tag" -R "$GITHUB_REPOSITORY" \
-            --title "${{ steps.build.outputs.release }}" \
-            --notes "Kernel \`${{ steps.build.outputs.release }}\`
+            --title "${{ steps.build.outputs.name }} ($CLANG)" \
+            --notes "Equinox Kernel untuk garnet
+          Kernel \`${{ steps.build.outputs.release }}\`
           ACK \`$KERNEL_BRANCH\` @ \`${{ steps.ver.outputs.ack }}\`
           SukiSU Ultra \`$KSU_REF\` @ \`${{ steps.ver.outputs.ksu }}\` (built-in, KPM aktif)
           SUSFS ${{ steps.build.outputs.susfs_version }} @ \`${{ steps.ver.outputs.susfs }}\`
@@ -220,4 +239,4 @@ jobs:
 
           Uji dulu dengan \`fastboot boot\` sebelum flash permanen."
           # --clobber: build ulang paksa menimpa file rilis yang sama.
-          gh release upload "$tag" Image kernel-garnet-*-AnyKernel3.zip ksu_module_susfs.zip SHA256SUMS -R "$GITHUB_REPOSITORY" --clobber
+          gh release upload "$tag" Image Equinox-*-AnyKernel3.zip ksu_module_susfs.zip SHA256SUMS -R "$GITHUB_REPOSITORY" --clobber
