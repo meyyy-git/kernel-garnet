@@ -18,6 +18,9 @@ on:
       susfs_ref:
         description: Cabang/commit susfs4ksu
         default: gki-android12-5.10
+      experiments:
+        description: Percobaan dari folder experiments/, dipisah spasi (mis. "adios33 hz300"). Kosong = build resmi
+        default: ''
       force:
         description: Build ulang walau rilis dengan versi yang sama sudah ada
         type: boolean
@@ -33,6 +36,8 @@ env:
   KERNEL_BRANCH: ${{ inputs.kernel_branch || 'android12-5.10' }}
   KSU_REF: ${{ inputs.ksu_ref || 'builtin' }}
   SUSFS_REF: ${{ inputs.susfs_ref || 'gki-android12-5.10' }}
+  # Percobaan tidak pernah masuk build resmi/terjadwal; hanya lewat input manual.
+  EXPERIMENTS: ${{ inputs.experiments }}
   ACK_REPO: https://android.googlesource.com/kernel/common
   KSU_REPO: https://github.com/SukiSU-Ultra/SukiSU-Ultra
   SUSFS_REPO: https://gitlab.com/simonpunk/susfs4ksu
@@ -63,6 +68,12 @@ jobs:
           susfs=$(head_of "$SUSFS_REPO" "$SUSFS_REF")
           # GITHUB_SHA ikut: perubahan workflow/konfigurasi juga harus memicu build baru.
           tag="$KERNEL_BRANCH-$ack-sukisu-$ksu-susfs-$susfs-${CLANG#clang-}-${GITHUB_SHA::7}"
+          # Akhiran percobaan, mis. "-exp-adios33-hz300"; kosong untuk build resmi.
+          exp=""
+          for e in $EXPERIMENTS; do exp="$exp-$e"; done
+          if [ -n "$exp" ]; then exp="-exp$exp"; fi
+          tag="$tag$exp"
+          echo "exp=$exp" >> "$GITHUB_OUTPUT"
           {
             echo "ack=$ack"
             echo "ksu=$ksu"
@@ -151,6 +162,14 @@ jobs:
           done
           # Kalau pemeriksaan ini masih ada, layar HyperOS berkedip (lihat patches/SOURCE.txt).
           ! grep -q 'valid clone check' drivers/gpu/drm/drm_atomic_helper.c
+          for e in $EXPERIMENTS; do
+            [ -f "../repo/experiments/$e.patch" ] || [ -f "../repo/experiments/$e.config" ] \
+              || { echo "Percobaan tidak dikenal: $e"; exit 1; }
+            if [ -f "../repo/experiments/$e.patch" ]; then
+              echo "== percobaan $e"
+              patch -p1 < "../repo/experiments/$e.patch"
+            fi
+          done
 
       - name: Konfigurasi
         if: steps.ver.outputs.skip != 'true'
@@ -168,7 +187,17 @@ jobs:
           # dipertahankan karena manager root membaca KMI dari sana. Yang perlu lolos deteksi
           # bisa menyamarkannya lewat fitur spoof uname SUSFS.
           echo "-android12-9-Equinox-r$GITHUB_RUN_NUMBER" > .scmversion
+          for e in $EXPERIMENTS; do
+            if [ -f "../repo/experiments/$e.config" ]; then cat "../repo/experiments/$e.config" >> arch/arm64/configs/gki_defconfig; fi
+          done
           make $MAKE_ARGS gki_defconfig
+          # Opsi percobaan yang diam-diam tidak terpasang membuat hasil uji menyesatkan.
+          for e in $EXPERIMENTS; do
+            [ -f "../repo/experiments/$e.config" ] || continue
+            while read -r line; do
+              grep -qxF "$line" out/.config || { echo "Percobaan $e: $line tidak aktif"; exit 1; }
+            done < "../repo/experiments/$e.config"
+          done
           # Tanpa salah satu opsi ini, modul vendor stok ditolak atau kernel panic saat boot.
           for opt in KSU KPM KSU_SUSFS CFI_CLANG SHADOW_CALL_STACK LTO_CLANG_THIN MODVERSIONS; do
             grep -q "^CONFIG_$opt=y" out/.config || { echo "CONFIG_$opt tidak aktif"; exit 1; }
@@ -188,7 +217,7 @@ jobs:
           kver=$(make -s $MAKE_ARGS kernelversion)
           susfs_version=$(sed -n 's/^#define SUSFS_VERSION "\(.*\)"/\1/p' include/linux/susfs.h)
           # Nama build: Equinox-garnet-<versi kernel>-r<nomor build>.
-          name="Equinox-garnet-$kver-r$GITHUB_RUN_NUMBER"
+          name="Equinox-garnet-$kver-r$GITHUB_RUN_NUMBER${{ steps.ver.outputs.exp }}"
           {
             echo "release=$release"
             echo "susfs_version=$susfs_version"
@@ -208,6 +237,7 @@ jobs:
             echo "  Root     : SukiSU Ultra ${{ steps.ver.outputs.ksu }} + KPM"
             echo "  Hiding   : SUSFS $susfs_version"
             echo "  Compiler : $CLANG"
+            if [ -n "$EXPERIMENTS" ]; then echo "  EXPERIMENTAL BUILD: $EXPERIMENTS"; fi
           } > ak3/version
           cat ak3/banner ak3/version
           cp Image ak3/Image
@@ -259,9 +289,15 @@ jobs:
           EOF
           # Rilis baru selalu prerelease berlabel UNTESTED: build yang lolos kompilasi belum
           # tentu boot. Label dicabut manual setelah lolos uji fastboot boot di HP.
+          label="[UNTESTED]"
+          if [ -n "$EXPERIMENTS" ]; then
+            label="[EXPERIMENT]"
+            printf '> **Experimental build** with: `%s`. For testing only, not a release.\n\n' "$EXPERIMENTS" \
+              | cat - notes.md > notes.tmp && mv notes.tmp notes.md
+          fi
           if ! gh release view "$tag" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release create "$tag" -R "$GITHUB_REPOSITORY" --prerelease \
-              --title "[UNTESTED] $name" --notes-file notes.md
+              --title "$label $name" --notes-file notes.md
           fi
           # --clobber: build ulang paksa menimpa file rilis yang sama.
           gh release upload "$tag" Image Equinox-*-AnyKernel3.zip ksu_module_susfs.zip SHA256SUMS -R "$GITHUB_REPOSITORY" --clobber

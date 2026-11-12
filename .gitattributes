@@ -3,3 +3,4 @@
 *.yml text eol=lf
 banner -text
 *.md text eol=lf
+*.config text eol=lf

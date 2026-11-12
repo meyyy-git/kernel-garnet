@@ -1,0 +1,13 @@
+Percobaan performa. Tidak pernah masuk build resmi; hanya dibangun kalau disebut di input
+"experiments" saat menjalankan workflow secara manual, dan rilisnya berlabel [EXPERIMENT].
+Uji selalu lewat `fastboot boot`, jangan langsung di-flash.
+
+<nama>.patch  ditambal ke source kernel      <nama>.config  ditambahkan ke gki_defconfig
+
+adios33       I/O scheduler ADIOS v3.3.0 dari ramabondanp/android_kernel_common-5.10
+              (commit 05006c9b5f 8d52d83f0e d066aa3cf6 0afca57889 9fd9e34896 c031af35c4).
+              v3.2.0 membuat penulisan macet di UFS garnet (build r15).
+schedhorizon  Governor cpufreq schedhorizon, commit 2afc3cddbb dari tree yang sama.
+              Pernah dicurigai membuat sistem merayap (build r13), tapi r13 juga membawa
+              ADIOS v3.2.0, jadi penyebabnya belum terpisah.
+hz300         Timer kernel 300 Hz (bawaan 250 Hz). Modul vendor dibuat untuk 250 Hz.
