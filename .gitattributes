@@ -2,3 +2,4 @@
 *.sh text eol=lf
 *.yml text eol=lf
 banner -text
+*.md text eol=lf

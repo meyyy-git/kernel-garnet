@@ -164,8 +164,10 @@ jobs:
           printf 'CONFIG_KSU=y\nCONFIG_KPM=y\nCONFIG_KSU_SUSFS=y\n' >> arch/arm64/configs/gki_defconfig
           # TCP BBR sebagai default: satu-satunya opsi performa umum yang belum ada di gki_defconfig.
           printf 'CONFIG_TCP_CONG_ADVANCED=y\nCONFIG_TCP_CONG_BBR=y\nCONFIG_DEFAULT_BBR=y\n' >> arch/arm64/configs/gki_defconfig
-          # Nama rilis kernel mengikuti pola GKI; tanpa ini muncul akhiran "-dirty".
-          echo '-android12-9-garnet' > .scmversion
+          # Nama kernel di uname: 5.10.x-android12-9-Equinox-r<nomor build>. Bagian "android12-9"
+          # dipertahankan karena manager root membaca KMI dari sana. Yang perlu lolos deteksi
+          # bisa menyamarkannya lewat fitur spoof uname SUSFS.
+          echo "-android12-9-Equinox-r$GITHUB_RUN_NUMBER" > .scmversion
           make $MAKE_ARGS gki_defconfig
           # Tanpa salah satu opsi ini, modul vendor stok ditolak atau kernel panic saat boot.
           for opt in KSU KPM KSU_SUSFS CFI_CLANG SHADOW_CALL_STACK LTO_CLANG_THIN MODVERSIONS; do
@@ -185,8 +187,7 @@ jobs:
           release=$(make -s $MAKE_ARGS kernelrelease)
           kver=$(make -s $MAKE_ARGS kernelversion)
           susfs_version=$(sed -n 's/^#define SUSFS_VERSION "\(.*\)"/\1/p' include/linux/susfs.h)
-          # Nama build: Equinox-garnet-<versi kernel>-r<nomor build>. Sengaja tidak masuk ke
-          # uname, karena nama custom di sana diperiksa aplikasi pendeteksi root.
+          # Nama build: Equinox-garnet-<versi kernel>-r<nomor build>.
           name="Equinox-garnet-$kver-r$GITHUB_RUN_NUMBER"
           {
             echo "release=$release"
@@ -220,19 +221,47 @@ jobs:
         run: |
           set -euo pipefail
           tag="${{ steps.ver.outputs.tag }}"
-          gh release view "$tag" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
-          # Rilis baru selalu prerelease berlabel BELUM DIUJI: build yang lolos kompilasi belum
+          name="${{ steps.build.outputs.name }}"
+          # Catatan rilis untuk publik, berbahasa Inggris.
+          cat > notes.md <<EOF
+          ## Equinox Kernel for Redmi Note 13 Pro 5G / POCO X6 5G (garnet)
+
+          **Kernel** \`${{ steps.build.outputs.release }}\` (GKI \`$KERNEL_BRANCH\`)
+
+          ### What's inside
+          - **Root:** SukiSU Ultra, built in, with KPM
+          - **Root hiding:** SUSFS ${{ steps.build.outputs.susfs_version }}
+          - **Network:** TCP BBR as the default congestion control
+          - **Display:** HyperOS flicker fix (reverts "drm: Add valid clones check")
+          - **Toolchain:** official AOSP \`$CLANG\`, with CFI, SCS and ThinLTO enabled
+
+          ### Install
+          1. Back up your current \`boot\` partition.
+          2. Flash \`$name-AnyKernel3.zip\` from a custom recovery, then reboot.
+          3. Install the SukiSU Ultra manager.
+          4. Optional: flash \`ksu_module_susfs.zip\` from the manager to configure SUSFS.
+
+          Only the kernel inside \`boot\` is replaced. \`vendor_boot\`, \`dtbo\` and your data are not touched.
+          To go back, flash your \`boot\` backup.
+
+          ### Before you flash
+          - A release titled **[UNTESTED]** has been compiled but not yet booted on a device.
+          - Tested ROM: HyperOS 3 (Android 16). Other ROMs are untested.
+          - You flash at your own risk. Keep a \`boot\` backup and a PC with fastboot at hand.
+
+          ### Sources
+          - Android Common Kernel \`$KERNEL_BRANCH\` @ \`${{ steps.ver.outputs.ack }}\`
+          - SukiSU Ultra \`$KSU_REF\` @ \`${{ steps.ver.outputs.ksu }}\`
+          - susfs4ksu \`$SUSFS_REF\` @ \`${{ steps.ver.outputs.susfs }}\`
+          - Patches and build workflow: this repository @ \`${GITHUB_SHA::7}\`
+
+          Checksums are in \`SHA256SUMS\`.
+          EOF
+          # Rilis baru selalu prerelease berlabel UNTESTED: build yang lolos kompilasi belum
           # tentu boot. Label dicabut manual setelah lolos uji fastboot boot di HP.
-          gh release create "$tag" -R "$GITHUB_REPOSITORY" --prerelease \
-            --title "[BELUM DIUJI] ${{ steps.build.outputs.name }}" \
-            --notes "Equinox Kernel untuk garnet
-          Kernel \`${{ steps.build.outputs.release }}\`
-          ACK \`$KERNEL_BRANCH\` @ \`${{ steps.ver.outputs.ack }}\`
-          SukiSU Ultra \`$KSU_REF\` @ \`${{ steps.ver.outputs.ksu }}\` (built-in, KPM aktif)
-          SUSFS ${{ steps.build.outputs.susfs_version }} @ \`${{ steps.ver.outputs.susfs }}\`
-
-          Toolchain \`$CLANG\`, TCP BBR default, perbaikan kedipan layar HyperOS
-
-          Build ini belum diuji di HP. Uji dulu dengan \`fastboot boot\` sebelum flash permanen."
+          if ! gh release view "$tag" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$tag" -R "$GITHUB_REPOSITORY" --prerelease \
+              --title "[UNTESTED] $name" --notes-file notes.md
+          fi
           # --clobber: build ulang paksa menimpa file rilis yang sama.
           gh release upload "$tag" Image Equinox-*-AnyKernel3.zip ksu_module_susfs.zip SHA256SUMS -R "$GITHUB_REPOSITORY" --clobber
