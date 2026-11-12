@@ -1,6 +1,6 @@
 name: Build kernel garnet
 
-# Kernel GKI android12-5.10 untuk garnet: Google ACK murni + KernelSU-Next built-in.
+# Kernel GKI android12-5.10 untuk garnet: Google ACK murni + SukiSU Ultra (cabang main, kprobes) built-in.
 # Hasilnya hanya `Image` (pengganti kernel di partisi boot). Tidak ada patch pihak ketiga.
 
 on:
@@ -10,7 +10,7 @@ on:
         description: Cabang ACK (android12-5.10 = rilis, android12-5.10-lts = lebih baru)
         default: android12-5.10
       ksu_ref:
-        description: Tag/commit KernelSU-Next (kosong = tag rilis terbaru)
+        description: Tag/commit SukiSU Ultra (kosong = tag rilis terbaru)
         default: ''
       force:
         description: Build ulang walau rilis dengan versi yang sama sudah ada
@@ -25,7 +25,7 @@ permissions:
 
 env:
   KERNEL_BRANCH: ${{ inputs.kernel_branch || 'android12-5.10' }}
-  KSU_REPO: https://github.com/KernelSU-Next/KernelSU-Next
+  KSU_REPO: https://github.com/SukiSU-Ultra/SukiSU-Ultra
   # Toolchain resmi cabang ini (lihat CLANG_PREBUILT_BIN di build.config.common ACK).
   CLANG: clang-r416183b
   MAKE_ARGS: ARCH=arm64 LLVM=1 LLVM_IAS=1 CROSS_COMPILE=aarch64-linux-gnu- O=out
@@ -46,10 +46,10 @@ jobs:
           [ -n "$ack_sha" ] || { echo "Cabang ACK $KERNEL_BRANCH tidak ditemukan"; exit 1; }
           if [ -z "$KSU_REF" ]; then
             KSU_REF=$(git ls-remote --tags --refs --sort=-v:refname "$KSU_REPO" 'v*' \
-              | grep -v legacy | sed 's@.*refs/tags/@@' | awk 'NR==1')  # awk, bukan head: head memutus pipa dan pipefail menggagalkan langkah
+              | sed 's@.*refs/tags/@@' | awk 'NR==1')  # awk, bukan head: head memutus pipa dan pipefail menggagalkan langkah
           fi
-          [ -n "$KSU_REF" ] || { echo "Tag KernelSU-Next tidak ditemukan"; exit 1; }
-          tag="$KERNEL_BRANCH-$ack_sha-ksu-$KSU_REF"
+          [ -n "$KSU_REF" ] || { echo "Tag SukiSU Ultra tidak ditemukan"; exit 1; }
+          tag="$KERNEL_BRANCH-$ack_sha-sukisu-$KSU_REF"
           echo "ack_sha=$ack_sha" >> "$GITHUB_OUTPUT"
           echo "ksu_ref=$KSU_REF" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
@@ -85,15 +85,15 @@ jobs:
         run: |
           git clone --depth=1 -b "$KERNEL_BRANCH" https://android.googlesource.com/kernel/common kernel
 
-      - name: Tambahkan KernelSU-Next
+      - name: Tambahkan SukiSU Ultra
         if: steps.ver.outputs.skip != 'true'
         run: |
           set -euo pipefail
           cd kernel
           # Clone penuh: Kbuild KernelSU menghitung nomor versi dari jumlah commit.
-          git clone "$KSU_REPO" KernelSU-Next
-          git -C KernelSU-Next checkout "${{ steps.ver.outputs.ksu_ref }}"
-          ln -s ../KernelSU-Next/kernel drivers/kernelsu
+          git clone "$KSU_REPO" KernelSU
+          git -C KernelSU checkout "${{ steps.ver.outputs.ksu_ref }}"
+          ln -s ../KernelSU/kernel drivers/kernelsu
           printf '\nobj-$(CONFIG_KSU) += kernelsu/\n' >> drivers/Makefile
           sed -i '/^endmenu/i source "drivers/kernelsu/Kconfig"' drivers/Kconfig
 
@@ -105,12 +105,12 @@ jobs:
           cd kernel
           # ThinLTO: Full LTO tidak muat di RAM runner. CFI dan SCS tetap aktif dari gki_defconfig.
           sed -i 's/^CONFIG_LTO_CLANG_FULL=y/CONFIG_LTO_CLANG_THIN=y/' arch/arm64/configs/gki_defconfig
-          echo 'CONFIG_KSU=y' >> arch/arm64/configs/gki_defconfig
+          printf 'CONFIG_KSU=y\nCONFIG_KPM=y\n' >> arch/arm64/configs/gki_defconfig
           # Nama rilis kernel mengikuti pola GKI; tanpa ini muncul akhiran "-dirty".
           echo '-android12-9-garnet' > .scmversion
           make $MAKE_ARGS gki_defconfig
           # Tanpa salah satu opsi ini, modul vendor stok ditolak atau kernel panic saat boot.
-          for opt in KSU CFI_CLANG SHADOW_CALL_STACK LTO_CLANG_THIN MODVERSIONS KPROBES; do
+          for opt in KSU KPM CFI_CLANG SHADOW_CALL_STACK LTO_CLANG_THIN MODVERSIONS KPROBES; do
             grep -q "^CONFIG_$opt=y" out/.config || { echo "CONFIG_$opt tidak aktif"; exit 1; }
           done
 
@@ -141,7 +141,7 @@ jobs:
             --title "${{ steps.build.outputs.release }}" \
             --notes "Kernel \`${{ steps.build.outputs.release }}\`
           ACK \`$KERNEL_BRANCH\` @ \`${{ steps.ver.outputs.ack_sha }}\`
-          KernelSU-Next \`${{ steps.ver.outputs.ksu_ref }}\` (built-in)
+          SukiSU Ultra \`${{ steps.ver.outputs.ksu_ref }}\` (built-in, KPM aktif, tanpa SUSFS)
 
           Uji dulu dengan \`fastboot boot\` sebelum flash permanen."
           # --clobber: build ulang paksa menimpa file rilis yang sama.
