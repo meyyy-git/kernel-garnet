@@ -1,0 +1,11 @@
+Patch di folder ini disalin dari https://github.com/ramabondanp/android_kernel_common-5.10
+(GPL-2.0, cabang android12-5.10) dan dirakit ulang terhadap Google ACK android12-5.10 (5.10.270).
+Diterapkan berurutan oleh .github/workflows/build.yml.
+
+0001-adios.patch         I/O scheduler ADIOS v3.2.0 + perbaikan
+                         commit 05006c9b5f 8d52d83f0e d066aa3cf6 0afca57889 9fd9e34896
+0002-schedhorizon.patch  Governor cpufreq schedhorizon
+                         commit 2afc3cddbb
+
+Keduanya hanya menambah file baru dan baris Kconfig/Makefile; tidak mengubah struktur data
+yang dipakai modul vendor. Kalau patch gagal menempel setelah ACK diperbarui, build berhenti.

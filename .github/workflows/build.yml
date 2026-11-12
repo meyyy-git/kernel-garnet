@@ -145,6 +145,17 @@ jobs:
           # Modul SUSFS untuk dipasang lewat manager, dari commit yang sama dengan patch kernel.
           (cd ../susfs4ksu/ksu_module_susfs && zip -qr "$GITHUB_WORKSPACE/ksu_module_susfs.zip" .)
 
+      - name: Terapkan patch performa
+        if: steps.ver.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          cd kernel
+          # Asal-usul tiap patch ada di patches/SOURCE.txt.
+          for p in ../repo/patches/*.patch; do
+            echo "== $p"
+            patch -p1 < "$p"
+          done
+
       - name: Konfigurasi
         if: steps.ver.outputs.skip != 'true'
         run: |
@@ -157,11 +168,13 @@ jobs:
           printf 'CONFIG_KSU=y\nCONFIG_KPM=y\nCONFIG_KSU_SUSFS=y\n' >> arch/arm64/configs/gki_defconfig
           # TCP BBR sebagai default: satu-satunya opsi performa umum yang belum ada di gki_defconfig.
           printf 'CONFIG_TCP_CONG_ADVANCED=y\nCONFIG_TCP_CONG_BBR=y\nCONFIG_DEFAULT_BBR=y\n' >> arch/arm64/configs/gki_defconfig
+          # Dari patches/: tersedia sebagai pilihan, default governor dan scheduler tidak diubah.
+          printf 'CONFIG_MQ_IOSCHED_ADIOS=y\nCONFIG_CPU_FREQ_GOV_SCHEDHORIZON=y\n' >> arch/arm64/configs/gki_defconfig
           # Nama rilis kernel mengikuti pola GKI; tanpa ini muncul akhiran "-dirty".
           echo '-android12-9-garnet' > .scmversion
           make $MAKE_ARGS gki_defconfig
           # Tanpa salah satu opsi ini, modul vendor stok ditolak atau kernel panic saat boot.
-          for opt in KSU KPM KSU_SUSFS CFI_CLANG SHADOW_CALL_STACK LTO_CLANG_THIN MODVERSIONS; do
+          for opt in KSU KPM KSU_SUSFS MQ_IOSCHED_ADIOS CPU_FREQ_GOV_SCHEDHORIZON CFI_CLANG SHADOW_CALL_STACK LTO_CLANG_THIN MODVERSIONS; do
             grep -q "^CONFIG_$opt=y" out/.config || { echo "CONFIG_$opt tidak aktif"; exit 1; }
           done
           grep -q '^CONFIG_DEFAULT_TCP_CONG="bbr"' out/.config || { echo "BBR bukan default"; exit 1; }
@@ -203,7 +216,7 @@ jobs:
           SukiSU Ultra \`$KSU_REF\` @ \`${{ steps.ver.outputs.ksu }}\` (built-in, KPM aktif)
           SUSFS ${{ steps.build.outputs.susfs_version }} @ \`${{ steps.ver.outputs.susfs }}\`
 
-          Toolchain \`$CLANG\`, TCP BBR default
+          Toolchain \`$CLANG\`, TCP BBR default, I/O scheduler ADIOS, governor schedhorizon
 
           Uji dulu dengan \`fastboot boot\` sebelum flash permanen."
           # --clobber: build ulang paksa menimpa file rilis yang sama.
