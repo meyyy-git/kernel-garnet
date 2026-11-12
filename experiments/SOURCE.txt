@@ -13,6 +13,11 @@ adios33       I/O scheduler ADIOS v3.3.0 dari ramabondanp/android_kernel_common-
               kode ADIOS (ditulis untuk 6.x) memakai data->hctx. Tree asalnya pun masih
               membawa bug ini. Patch di sini sudah diperbaiki: limit_depth mengikuti
               mq-deadline 5.10 (shallow_depth = async_depth) dan to_word_depth dihapus.
+              Hasil uji versi diperbaiki (build r21, 12 Nov 2026, fastboot boot):
+              7 menit + uji tulis 1 GB paralel, ADIOS aktif di sda-sdf, 0 crash, 0 proses macet.
+              Dibanding bfq pada boot yang sama (3 putaran, tulis 4x256 MB fsync):
+              tulis ADIOS 706-711 MB/s vs bfq 504-616 MB/s. Baca dan latensi baca acak
+              saat ada tulis besar: hasil bervariasi, belum ada pemenang yang jelas.
 schedhorizon  Governor cpufreq schedhorizon, commit 2afc3cddbb dari tree yang sama.
               Pernah dicurigai membuat sistem merayap (build r13), tapi r13 juga membawa
               ADIOS v3.2.0, jadi penyebabnya belum terpisah.
