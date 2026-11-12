@@ -20,6 +20,18 @@ IS_SLOT_DEVICE=1;
 RAMDISK_COMPRESSION=auto;
 PATCH_VBMETA_FLAG=auto;
 
+# AnyKernel3 mencari slot aktif lewat getprop, lalu /proc/cmdline. Di garnet dengan ROM
+# Android 16, getprop mati di recovery setelah AK3 memasang /system milik ROM (apex runtime
+# gagal di-mount), dan slot hanya tercatat di /proc/bootconfig. Tanpa cadangan ini instalasi
+# berhenti dengan "Unable to determine active slot".
+getprop() {
+  local val="$(command getprop "$@" 2>/dev/null)";
+  if [ -z "$val" ] && [ "$1" = ro.boot.slot_suffix ]; then
+    val="$(sed -n 's/^androidboot\.slot_suffix *= *"\(.*\)"/\1/p' /proc/bootconfig 2>/dev/null)";
+  fi;
+  echo "$val";
+}
+
 . tools/ak3-core.sh;
 
 ui_print " ";
