@@ -3,12 +3,7 @@ Patch di folder ini disalin dari https://github.com/ramabondanp/android_kernel_c
 Diterapkan berurutan oleh .github/workflows/build.yml. Kalau patch gagal menempel setelah
 ACK diperbarui, build berhenti.
 
-0001-adios.patch
-    I/O scheduler ADIOS v3.2.0 + perbaikan. Hanya menambah file baru dan baris Kconfig/Makefile.
-    commit 05006c9b5f 8d52d83f0e d066aa3cf6 0afca57889 9fd9e34896
-    Status: lolos kompilasi, BELUM teruji di HP.
-
-0002-revert-drm-valid-clones-check.patch
+0001-revert-drm-valid-clones-check.patch
     Membatalkan "drm: Add valid clones check" (masuk ACK lewat stable, Juni 2025).
     commit 3ac2b8bdb7 (Pzqqt)
     Wajib untuk HyperOS: driver layar vendor tidak mengisi possible_clones, sehingga commit
@@ -16,6 +11,11 @@ ACK diperbarui, build berhenti.
     Terbukti di garnet 12 Nov 2026: tanpa patch ini log kernel berisi
     "crtc104 failed valid clone check for mask 0x3"; di kernel yang membatalkannya 0 kegagalan.
 
-Yang pernah dicoba lalu dicabut:
-    Governor schedhorizon (commit 2afc3cddbb). Saat Encore memasangnya di kernel ini, sistem
-    merayap sampai boot tidak selesai. Jangan dimasukkan lagi tanpa uji fastboot boot.
+Yang pernah dicoba lalu dicabut (jangan dimasukkan lagi tanpa uji fastboot boot):
+    I/O scheduler ADIOS v3.2.0 (commit 05006c9b5f 8d52d83f0e d066aa3cf6 0afca57889 9fd9e34896).
+        Begitu diaktifkan di UFS garnet, penulisan macet: kworker flush dan f2fs_ckpt tertahan
+        di status D, load naik di atas 100, reboot biasa ikut tertahan (build r15, 12 Nov 2026).
+    Governor schedhorizon (commit 2afc3cddbb).
+        Saat Encore memasangnya, sistem merayap sampai boot tidak selesai (build r13).
+    Toolchain clang-r536225 (clang 19).
+        Kernel mati dalam beberapa detik, dengan atau tanpa patch (build r14).
