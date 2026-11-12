@@ -18,6 +18,11 @@ on:
       susfs_ref:
         description: Cabang/commit susfs4ksu
         default: gki-android12-5.10
+      clang:
+        description: Toolchain (clang-r416183b = resmi Android 12, pakai ini kalau kernel gagal boot)
+        type: choice
+        options: [clang-r536225, clang-r416183b]
+        default: clang-r536225
       force:
         description: Build ulang walau rilis dengan versi yang sama sudah ada
         type: boolean
@@ -36,8 +41,9 @@ env:
   ACK_REPO: https://android.googlesource.com/kernel/common
   KSU_REPO: https://github.com/SukiSU-Ultra/SukiSU-Ultra
   SUSFS_REPO: https://gitlab.com/simonpunk/susfs4ksu
-  # Toolchain resmi cabang ini (lihat CLANG_PREBUILT_BIN di build.config.common ACK).
-  CLANG: clang-r416183b
+  # r536225 (clang 19) menghasilkan kode lebih optimal; toolchain resmi cabang ini
+  # adalah r416183b (clang 12, lihat CLANG_PREBUILT_BIN di build.config.common ACK).
+  CLANG: ${{ inputs.clang || 'clang-r536225' }}
   MAKE_ARGS: ARCH=arm64 LLVM=1 LLVM_IAS=1 CROSS_COMPILE=aarch64-linux-gnu- O=out
 
 jobs:
@@ -59,7 +65,8 @@ jobs:
           ack=$(head_of "$ACK_REPO" "$KERNEL_BRANCH")
           ksu=$(head_of "$KSU_REPO" "$KSU_REF")
           susfs=$(head_of "$SUSFS_REPO" "$SUSFS_REF")
-          tag="$KERNEL_BRANCH-$ack-sukisu-$ksu-susfs-$susfs"
+          # GITHUB_SHA ikut: perubahan workflow/konfigurasi juga harus memicu build baru.
+          tag="$KERNEL_BRANCH-$ack-sukisu-$ksu-susfs-$susfs-${CLANG#clang-}-${GITHUB_SHA::7}"
           {
             echo "ack=$ack"
             echo "ksu=$ksu"
@@ -89,9 +96,18 @@ jobs:
       - name: Unduh clang
         if: steps.ver.outputs.skip != 'true' && steps.clang.outputs.cache-hit != 'true'
         run: |
+          # r416183b tidak ada lagi di cabang main AOSP, jadi diambil dari tag Android 12.
+          ref=refs/heads/main
+          if [ "$CLANG" = clang-r416183b ]; then ref=refs/tags/android-12.0.0_r1; fi
           mkdir clang
-          curl -fL "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/tags/android-12.0.0_r1/$CLANG.tar.gz" \
+          curl -fL "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/$ref/$CLANG.tar.gz" \
             | tar -xz -C clang
+
+      - name: Checkout repo ini
+        if: steps.ver.outputs.skip != 'true'
+        uses: actions/checkout@v4
+        with:
+          path: repo
 
       - name: Ambil source kernel (Google ACK)
         if: steps.ver.outputs.skip != 'true'
@@ -139,6 +155,8 @@ jobs:
           sed -i 's/^CONFIG_LTO_CLANG_FULL=y/CONFIG_LTO_CLANG_THIN=y/' arch/arm64/configs/gki_defconfig
           # Semua fitur SUSFS aktif secara default begitu CONFIG_KSU_SUSFS=y.
           printf 'CONFIG_KSU=y\nCONFIG_KPM=y\nCONFIG_KSU_SUSFS=y\n' >> arch/arm64/configs/gki_defconfig
+          # TCP BBR sebagai default: satu-satunya opsi performa umum yang belum ada di gki_defconfig.
+          printf 'CONFIG_TCP_CONG_ADVANCED=y\nCONFIG_TCP_CONG_BBR=y\nCONFIG_DEFAULT_BBR=y\n' >> arch/arm64/configs/gki_defconfig
           # Nama rilis kernel mengikuti pola GKI; tanpa ini muncul akhiran "-dirty".
           echo '-android12-9-garnet' > .scmversion
           make $MAKE_ARGS gki_defconfig
@@ -146,6 +164,7 @@ jobs:
           for opt in KSU KPM KSU_SUSFS CFI_CLANG SHADOW_CALL_STACK LTO_CLANG_THIN MODVERSIONS; do
             grep -q "^CONFIG_$opt=y" out/.config || { echo "CONFIG_$opt tidak aktif"; exit 1; }
           done
+          grep -q '^CONFIG_DEFAULT_TCP_CONG="bbr"' out/.config || { echo "BBR bukan default"; exit 1; }
           grep '^CONFIG_KSU' out/.config
 
       - name: Build
@@ -159,8 +178,15 @@ jobs:
           echo "release=$(make -s $MAKE_ARGS kernelrelease)" >> "$GITHUB_OUTPUT"
           echo "susfs_version=$(sed -n 's/^#define SUSFS_VERSION "\(.*\)"/\1/p' include/linux/susfs.h)" >> "$GITHUB_OUTPUT"
           cp out/arch/arm64/boot/Image "$GITHUB_WORKSPACE/Image"
+          release=$(make -s $MAKE_ARGS kernelrelease)
           cd "$GITHUB_WORKSPACE"
-          sha256sum Image ksu_module_susfs.zip | tee SHA256SUMS
+          # Installer AnyKernel3: flash lewat manager root atau recovery.
+          git clone --depth=1 https://github.com/osm0sis/AnyKernel3 ak3
+          rm -rf ak3/.git ak3/.github ak3/README.md
+          cp repo/anykernel/anykernel.sh ak3/anykernel.sh
+          cp Image ak3/Image
+          (cd ak3 && zip -qr9 "../kernel-garnet-$release-AnyKernel3.zip" . -x '*placeholder')
+          sha256sum Image kernel-garnet-*-AnyKernel3.zip ksu_module_susfs.zip | tee SHA256SUMS
 
       - name: Rilis
         if: steps.ver.outputs.skip != 'true'
@@ -177,6 +203,8 @@ jobs:
           SukiSU Ultra \`$KSU_REF\` @ \`${{ steps.ver.outputs.ksu }}\` (built-in, KPM aktif)
           SUSFS ${{ steps.build.outputs.susfs_version }} @ \`${{ steps.ver.outputs.susfs }}\`
 
+          Toolchain \`$CLANG\`, TCP BBR default
+
           Uji dulu dengan \`fastboot boot\` sebelum flash permanen."
           # --clobber: build ulang paksa menimpa file rilis yang sama.
-          gh release upload "$tag" Image ksu_module_susfs.zip SHA256SUMS -R "$GITHUB_REPOSITORY" --clobber
+          gh release upload "$tag" Image kernel-garnet-*-AnyKernel3.zip ksu_module_susfs.zip SHA256SUMS -R "$GITHUB_REPOSITORY" --clobber
