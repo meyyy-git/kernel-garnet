@@ -56,7 +56,7 @@ ui_print "   - Root    : SukiSU Ultra with KPM";
 ui_print "   - Hiding  : SUSFS";
 ui_print "   - Network : TCP BBR";
 ui_print "   - Storage : ADIOS I/O scheduler";
-ui_print "   - CPU     : schedhorizon governor";
+ui_print "   - Display : HyperOS flicker fix";
 ui_print " ";
 ui_print "  Next steps:";
 ui_print "   1. Reboot your device.";

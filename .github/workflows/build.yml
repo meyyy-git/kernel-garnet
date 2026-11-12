@@ -18,11 +18,6 @@ on:
       susfs_ref:
         description: Cabang/commit susfs4ksu
         default: gki-android12-5.10
-      clang:
-        description: Toolchain (clang-r416183b = resmi Android 12, pakai ini kalau kernel gagal boot)
-        type: choice
-        options: [clang-r536225, clang-r416183b]
-        default: clang-r536225
       force:
         description: Build ulang walau rilis dengan versi yang sama sudah ada
         type: boolean
@@ -41,9 +36,10 @@ env:
   ACK_REPO: https://android.googlesource.com/kernel/common
   KSU_REPO: https://github.com/SukiSU-Ultra/SukiSU-Ultra
   SUSFS_REPO: https://gitlab.com/simonpunk/susfs4ksu
-  # r536225 (clang 19) menghasilkan kode lebih optimal; toolchain resmi cabang ini
-  # adalah r416183b (clang 12, lihat CLANG_PREBUILT_BIN di build.config.common ACK).
-  CLANG: ${{ inputs.clang || 'clang-r536225' }}
+  # Toolchain resmi cabang ini (CLANG_PREBUILT_BIN di build.config.common ACK). Jangan diganti:
+  # kernel hasil clang-r536225 (clang 19) mati dalam beberapa detik di garnet, dengan atau
+  # tanpa patch performa (diuji 12 Nov 2026 lewat fastboot boot).
+  CLANG: clang-r416183b
   MAKE_ARGS: ARCH=arm64 LLVM=1 LLVM_IAS=1 CROSS_COMPILE=aarch64-linux-gnu- O=out
 
 jobs:
@@ -97,10 +93,8 @@ jobs:
         if: steps.ver.outputs.skip != 'true' && steps.clang.outputs.cache-hit != 'true'
         run: |
           # r416183b tidak ada lagi di cabang main AOSP, jadi diambil dari tag Android 12.
-          ref=refs/heads/main
-          if [ "$CLANG" = clang-r416183b ]; then ref=refs/tags/android-12.0.0_r1; fi
           mkdir clang
-          curl -fL "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/$ref/$CLANG.tar.gz" \
+          curl -fL "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/tags/android-12.0.0_r1/$CLANG.tar.gz" \
             | tar -xz -C clang
 
       - name: Checkout repo ini
@@ -155,6 +149,8 @@ jobs:
             echo "== $p"
             patch -p1 < "$p"
           done
+          # Kalau pemeriksaan ini masih ada, layar HyperOS berkedip (lihat patches/SOURCE.txt).
+          ! grep -q 'valid clone check' drivers/gpu/drm/drm_atomic_helper.c
 
       - name: Konfigurasi
         if: steps.ver.outputs.skip != 'true'
@@ -168,13 +164,13 @@ jobs:
           printf 'CONFIG_KSU=y\nCONFIG_KPM=y\nCONFIG_KSU_SUSFS=y\n' >> arch/arm64/configs/gki_defconfig
           # TCP BBR sebagai default: satu-satunya opsi performa umum yang belum ada di gki_defconfig.
           printf 'CONFIG_TCP_CONG_ADVANCED=y\nCONFIG_TCP_CONG_BBR=y\nCONFIG_DEFAULT_BBR=y\n' >> arch/arm64/configs/gki_defconfig
-          # Dari patches/: tersedia sebagai pilihan, default governor dan scheduler tidak diubah.
-          printf 'CONFIG_MQ_IOSCHED_ADIOS=y\nCONFIG_CPU_FREQ_GOV_SCHEDHORIZON=y\n' >> arch/arm64/configs/gki_defconfig
+          # Dari patches/: tersedia sebagai pilihan, scheduler I/O default tidak diubah.
+          printf 'CONFIG_MQ_IOSCHED_ADIOS=y\n' >> arch/arm64/configs/gki_defconfig
           # Nama rilis kernel mengikuti pola GKI; tanpa ini muncul akhiran "-dirty".
           echo '-android12-9-garnet' > .scmversion
           make $MAKE_ARGS gki_defconfig
           # Tanpa salah satu opsi ini, modul vendor stok ditolak atau kernel panic saat boot.
-          for opt in KSU KPM KSU_SUSFS MQ_IOSCHED_ADIOS CPU_FREQ_GOV_SCHEDHORIZON CFI_CLANG SHADOW_CALL_STACK LTO_CLANG_THIN MODVERSIONS; do
+          for opt in KSU KPM KSU_SUSFS MQ_IOSCHED_ADIOS CFI_CLANG SHADOW_CALL_STACK LTO_CLANG_THIN MODVERSIONS; do
             grep -q "^CONFIG_$opt=y" out/.config || { echo "CONFIG_$opt tidak aktif"; exit 1; }
           done
           grep -q '^CONFIG_DEFAULT_TCP_CONG="bbr"' out/.config || { echo "BBR bukan default"; exit 1; }
@@ -235,7 +231,7 @@ jobs:
           SukiSU Ultra \`$KSU_REF\` @ \`${{ steps.ver.outputs.ksu }}\` (built-in, KPM aktif)
           SUSFS ${{ steps.build.outputs.susfs_version }} @ \`${{ steps.ver.outputs.susfs }}\`
 
-          Toolchain \`$CLANG\`, TCP BBR default, I/O scheduler ADIOS, governor schedhorizon
+          Toolchain \`$CLANG\`, TCP BBR default, I/O scheduler ADIOS, perbaikan kedipan layar HyperOS
 
           Uji dulu dengan \`fastboot boot\` sebelum flash permanen."
           # --clobber: build ulang paksa menimpa file rilis yang sama.
