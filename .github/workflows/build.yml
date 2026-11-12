@@ -1,7 +1,10 @@
 name: Build kernel garnet
 
-# Kernel GKI android12-5.10 untuk garnet: Google ACK murni + SukiSU Ultra (cabang main, kprobes) built-in.
-# Hasilnya hanya `Image` (pengganti kernel di partisi boot). Tidak ada patch pihak ketiga.
+# Kernel GKI android12-5.10 untuk garnet:
+#   Google ACK + SukiSU Ultra (cabang builtin) + SUSFS + KPM.
+# Hasil: `Image` (pengganti kernel di partisi boot) dan modul SUSFS untuk manager.
+# Satu-satunya tambalan ke source kernel adalah patch SUSFS resmi; ia hanya menyentuh
+# file .c, bukan header, jadi antarmuka modul vendor (KMI) tidak berubah.
 
 on:
   workflow_dispatch:
@@ -10,8 +13,11 @@ on:
         description: Cabang ACK (android12-5.10 = rilis, android12-5.10-lts = lebih baru)
         default: android12-5.10
       ksu_ref:
-        description: Tag/commit SukiSU Ultra (kosong = tag rilis terbaru)
-        default: ''
+        description: Cabang/commit SukiSU Ultra (harus turunan cabang builtin)
+        default: builtin
+      susfs_ref:
+        description: Cabang/commit susfs4ksu
+        default: gki-android12-5.10
       force:
         description: Build ulang walau rilis dengan versi yang sama sudah ada
         type: boolean
@@ -25,7 +31,11 @@ permissions:
 
 env:
   KERNEL_BRANCH: ${{ inputs.kernel_branch || 'android12-5.10' }}
+  KSU_REF: ${{ inputs.ksu_ref || 'builtin' }}
+  SUSFS_REF: ${{ inputs.susfs_ref || 'gki-android12-5.10' }}
+  ACK_REPO: https://android.googlesource.com/kernel/common
   KSU_REPO: https://github.com/SukiSU-Ultra/SukiSU-Ultra
+  SUSFS_REPO: https://gitlab.com/simonpunk/susfs4ksu
   # Toolchain resmi cabang ini (lihat CLANG_PREBUILT_BIN di build.config.common ACK).
   CLANG: clang-r416183b
   MAKE_ARGS: ARCH=arm64 LLVM=1 LLVM_IAS=1 CROSS_COMPILE=aarch64-linux-gnu- O=out
@@ -39,20 +49,23 @@ jobs:
         id: ver
         env:
           GH_TOKEN: ${{ github.token }}
-          KSU_REF: ${{ inputs.ksu_ref }}
         run: |
           set -euo pipefail
-          ack_sha=$(git ls-remote https://android.googlesource.com/kernel/common "refs/heads/$KERNEL_BRANCH" | cut -c1-12)
-          [ -n "$ack_sha" ] || { echo "Cabang ACK $KERNEL_BRANCH tidak ditemukan"; exit 1; }
-          if [ -z "$KSU_REF" ]; then
-            KSU_REF=$(git ls-remote --tags --refs --sort=-v:refname "$KSU_REPO" 'v*' \
-              | sed 's@.*refs/tags/@@' | awk 'NR==1')  # awk, bukan head: head memutus pipa dan pipefail menggagalkan langkah
-          fi
-          [ -n "$KSU_REF" ] || { echo "Tag SukiSU Ultra tidak ditemukan"; exit 1; }
-          tag="$KERNEL_BRANCH-$ack_sha-sukisu-$KSU_REF"
-          echo "ack_sha=$ack_sha" >> "$GITHUB_OUTPUT"
-          echo "ksu_ref=$KSU_REF" >> "$GITHUB_OUTPUT"
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          # Commit terkini sebuah cabang; kalau bukan nama cabang, pakai nilainya apa adanya.
+          head_of() {
+            sha=$(git ls-remote "$1" "refs/heads/$2" | cut -c1-10)
+            echo "${sha:-$2}"
+          }
+          ack=$(head_of "$ACK_REPO" "$KERNEL_BRANCH")
+          ksu=$(head_of "$KSU_REPO" "$KSU_REF")
+          susfs=$(head_of "$SUSFS_REPO" "$SUSFS_REF")
+          tag="$KERNEL_BRANCH-$ack-sukisu-$ksu-susfs-$susfs"
+          {
+            echo "ack=$ack"
+            echo "ksu=$ksu"
+            echo "susfs=$susfs"
+            echo "tag=$tag"
+          } >> "$GITHUB_OUTPUT"
           if [ "${{ inputs.force }}" != "true" ] && gh release view "$tag" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Tidak ada yang baru: rilis $tag sudah ada."
             echo "skip=true" >> "$GITHUB_OUTPUT"
@@ -62,7 +75,7 @@ jobs:
         if: steps.ver.outputs.skip != 'true'
         run: |
           sudo apt-get update
-          sudo apt-get install -y git bc bison flex make libssl-dev libelf-dev python3 cpio \
+          sudo apt-get install -y git bc bison flex make libssl-dev libelf-dev python3 cpio zip \
             binutils-aarch64-linux-gnu
 
       - name: Cache clang
@@ -83,19 +96,34 @@ jobs:
       - name: Ambil source kernel (Google ACK)
         if: steps.ver.outputs.skip != 'true'
         run: |
-          git clone --depth=1 -b "$KERNEL_BRANCH" https://android.googlesource.com/kernel/common kernel
+          git clone --depth=1 -b "$KERNEL_BRANCH" "$ACK_REPO" kernel
 
       - name: Tambahkan SukiSU Ultra
         if: steps.ver.outputs.skip != 'true'
         run: |
           set -euo pipefail
           cd kernel
-          # Clone penuh: Kbuild KernelSU menghitung nomor versi dari jumlah commit.
+          # Clone penuh: build SukiSU menghitung nomor versi dari jumlah commit.
           git clone "$KSU_REPO" KernelSU
-          git -C KernelSU checkout "${{ steps.ver.outputs.ksu_ref }}"
+          git -C KernelSU checkout "${{ steps.ver.outputs.ksu }}"
           ln -s ../KernelSU/kernel drivers/kernelsu
           printf '\nobj-$(CONFIG_KSU) += kernelsu/\n' >> drivers/Makefile
           sed -i '/^endmenu/i source "drivers/kernelsu/Kconfig"' drivers/Kconfig
+
+      - name: Tambahkan SUSFS
+        if: steps.ver.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          git clone "$SUSFS_REPO" susfs4ksu
+          git -C susfs4ksu checkout "${{ steps.ver.outputs.susfs }}"
+          cd kernel
+          cp ../susfs4ksu/kernel_patches/fs/* fs/
+          cp ../susfs4ksu/kernel_patches/include/linux/* include/linux/
+          # Kalau ACK berubah sampai patch tidak cocok, patch gagal dan build berhenti di sini
+          # alih-alih menghasilkan kernel yang ditambal setengah.
+          patch -p1 < ../susfs4ksu/kernel_patches/50_add_susfs_in_gki-android12-5.10.patch
+          # Modul SUSFS untuk dipasang lewat manager, dari commit yang sama dengan patch kernel.
+          (cd ../susfs4ksu/ksu_module_susfs && zip -qr "$GITHUB_WORKSPACE/ksu_module_susfs.zip" .)
 
       - name: Konfigurasi
         if: steps.ver.outputs.skip != 'true'
@@ -105,14 +133,16 @@ jobs:
           cd kernel
           # ThinLTO: Full LTO tidak muat di RAM runner. CFI dan SCS tetap aktif dari gki_defconfig.
           sed -i 's/^CONFIG_LTO_CLANG_FULL=y/CONFIG_LTO_CLANG_THIN=y/' arch/arm64/configs/gki_defconfig
-          printf 'CONFIG_KSU=y\nCONFIG_KPM=y\n' >> arch/arm64/configs/gki_defconfig
+          # Semua fitur SUSFS aktif secara default begitu CONFIG_KSU_SUSFS=y.
+          printf 'CONFIG_KSU=y\nCONFIG_KPM=y\nCONFIG_KSU_SUSFS=y\n' >> arch/arm64/configs/gki_defconfig
           # Nama rilis kernel mengikuti pola GKI; tanpa ini muncul akhiran "-dirty".
           echo '-android12-9-garnet' > .scmversion
           make $MAKE_ARGS gki_defconfig
           # Tanpa salah satu opsi ini, modul vendor stok ditolak atau kernel panic saat boot.
-          for opt in KSU KPM CFI_CLANG SHADOW_CALL_STACK LTO_CLANG_THIN MODVERSIONS KPROBES; do
+          for opt in KSU KPM KSU_SUSFS CFI_CLANG SHADOW_CALL_STACK LTO_CLANG_THIN MODVERSIONS; do
             grep -q "^CONFIG_$opt=y" out/.config || { echo "CONFIG_$opt tidak aktif"; exit 1; }
           done
+          grep '^CONFIG_KSU' out/.config
 
       - name: Build
         if: steps.ver.outputs.skip != 'true'
@@ -122,11 +152,11 @@ jobs:
           export PATH="$PWD/clang/bin:$PATH"
           cd kernel
           make -j"$(nproc)" $MAKE_ARGS Image
-          release=$(make -s $MAKE_ARGS kernelrelease)
-          echo "release=$release" >> "$GITHUB_OUTPUT"
-          cd out/arch/arm64/boot
-          sha256sum Image > Image.sha256
-          cat Image.sha256
+          echo "release=$(make -s $MAKE_ARGS kernelrelease)" >> "$GITHUB_OUTPUT"
+          echo "susfs_version=$(sed -n 's/^#define SUSFS_VERSION "\(.*\)"/\1/p' include/linux/susfs.h)" >> "$GITHUB_OUTPUT"
+          cp out/arch/arm64/boot/Image "$GITHUB_WORKSPACE/Image"
+          cd "$GITHUB_WORKSPACE"
+          sha256sum Image ksu_module_susfs.zip | tee SHA256SUMS
 
       - name: Rilis
         if: steps.ver.outputs.skip != 'true'
@@ -134,15 +164,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          cd kernel/out/arch/arm64/boot
           tag="${{ steps.ver.outputs.tag }}"
           gh release view "$tag" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
           gh release create "$tag" -R "$GITHUB_REPOSITORY" \
             --title "${{ steps.build.outputs.release }}" \
             --notes "Kernel \`${{ steps.build.outputs.release }}\`
-          ACK \`$KERNEL_BRANCH\` @ \`${{ steps.ver.outputs.ack_sha }}\`
-          SukiSU Ultra \`${{ steps.ver.outputs.ksu_ref }}\` (built-in, KPM aktif, tanpa SUSFS)
+          ACK \`$KERNEL_BRANCH\` @ \`${{ steps.ver.outputs.ack }}\`
+          SukiSU Ultra \`$KSU_REF\` @ \`${{ steps.ver.outputs.ksu }}\` (built-in, KPM aktif)
+          SUSFS ${{ steps.build.outputs.susfs_version }} @ \`${{ steps.ver.outputs.susfs }}\`
 
           Uji dulu dengan \`fastboot boot\` sebelum flash permanen."
           # --clobber: build ulang paksa menimpa file rilis yang sama.
-          gh release upload "$tag" Image Image.sha256 -R "$GITHUB_REPOSITORY" --clobber
+          gh release upload "$tag" Image ksu_module_susfs.zip SHA256SUMS -R "$GITHUB_REPOSITORY" --clobber
