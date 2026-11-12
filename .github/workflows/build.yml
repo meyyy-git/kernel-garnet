@@ -106,6 +106,10 @@ jobs:
           # Clone penuh: build SukiSU menghitung nomor versi dari jumlah commit.
           git clone "$KSU_REPO" KernelSU
           git -C KernelSU checkout "${{ steps.ver.outputs.ksu }}"
+          # shortcut: salah ketik upstream sejak commit c70c717 (11 Nov 2026) membuat kompilasi gagal;
+          # sed ini tidak berefek setelah SukiSU memperbaikinya, hapus saat itu.
+          sed -i 's/^\(\s*\)policydb->latest_granting = old_pol->latest_granting + 1;/\1pol->latest_granting = old_pol->latest_granting + 1;/' \
+            KernelSU/kernel/selinux/rules.c
           ln -s ../KernelSU/kernel drivers/kernelsu
           printf '\nobj-$(CONFIG_KSU) += kernelsu/\n' >> drivers/Makefile
           sed -i '/^endmenu/i source "drivers/kernelsu/Kconfig"' drivers/Kconfig
