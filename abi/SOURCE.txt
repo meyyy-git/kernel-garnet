@@ -1,0 +1,15 @@
+garnet-vendor-boot.crc
+  Daftar "CRC simbol" yang diminta 330 modul vendor di ramdisk vendor_boot garnet
+  (HyperOS 3.0.315.0 CN, kernel bawaan 5.10 KMI android12-9). Simbol yang diekspor modul
+  vendor sendiri sudah dibuang; yang tersisa (2551) harus disediakan Image dengan CRC yang
+  sama persis, karena kernel memakai CONFIG_MODVERSIONS dan menolak modul yang CRC-nya beda.
+
+  Build membandingkan daftar ini dengan out/vmlinux.symvers setelah kompilasi. Satu saja
+  simbol hilang atau beda CRC berarti ada modul vendor yang tidak akan dimuat (biasanya
+  berakhir bootloop), jadi build digagalkan.
+
+  Batas: hanya modul di vendor_boot. Modul di vendor_dlkm belum masuk daftar.
+
+Membuat ulang (setelah update HyperOS mengganti modul vendor):
+  python abi/vendor_crc.py vendor_boot.img > abi/garnet-vendor-boot.crc
+  vendor_boot.img diambil dari HP: dd if=/dev/block/by-name/vendor_boot_a

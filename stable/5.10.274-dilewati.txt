@@ -1,0 +1,58 @@
+BENTROK b9363ea92f7c device property: Add cleanup.h based fwnode_handle_put() scope based cleanup.
+BENTROK 45a8fc4a1275 device property: fix infinite loop in fwnode_for_each_child_node()
+BENTROK d15f76fddc5d nfsd: fix nfsd_file leak on inter-server COPY setup failure
+ABI 3fb8386682ef kprobes: Protect kprobe_blacklist with RCU
+ABI f13308f19d71 f2fs: embed f2fs_gc_kthread in f2fs_sb_info
+BENTROK 9fa1fb4a876e tick/broadcast: Plug clockevents replacement race
+BENTROK 154acf97ecd2 nfsd: check nfsd4_acl_to_attr() return value in nfsd4_create()
+ABI 7ca44a63d9a5 nfsd: fix clock domain mismatch in clients_still_reclaiming()
+ABI f15a2c0c5f59 staging: sm750fb: fix mono image source stride mismatch in lynxfb_ops_imageblit()
+BENTROK b8f06b73ad14 arm64: mm: Fix the lockless page-table walk in show_pte()
+BENTROK 92824b85ea1a f2fs: return writeback error from collapse range
+ABI 740c34c62317 drm/msm/dsi: rename dual DSI to bonded DSI
+BENTROK 8fc7d4bd4fa6 drm/msm/dsi: round 6G byte clock rate to the PLL-achievable value
+ABI 235ab713d387 perf/x86/intel: Remove anythread_deprecated bit from perf_capabilities
+ABI ffa544903b8d smb3: make query_on_disk_id open context consistent and move to common code
+BENTROK 34245048d6c1 smb: client: fix create context out-of-bounds reads
+ABI 8ac53650b9ff drm/nouveau: switch over to the new pin interface
+BENTROK 6d6e9291413f drm/nouveau: don't bump pin count on failed re-pin in nouveau_bo_pin_locked()
+ABI 3579081fcfeb pinctrl: sunxi: keep a shadow copy of the data register output latches
+ABI 5fe54684db25 HID: core: remove #ifdef CONFIG_PM from hid_driver
+BENTROK 925135789c65 Bluetooth: hci_core: free the HCI ID if naming fails
+ABI 348218a4601e netfilter: nf_tables: avoid skb access on nf_stolen
+BENTROK 1827e34ea7a3 net: add and use skb_get_hash_net
+TERGANTUNG de83419b5062 ipv6: sr: use skb_get_hash_net() in seg6_make_flowlabel()
+ABI 134ef30a6262 USB: cdc-acm: fix racy TIOCMIWAIT implementation
+ABI 3c73c261bc97 Bluetooth: hci_core: Fix inquiry cache timestamps on 64-bit systems
+ABI f255e87b4f7e smb: client: split cifsFileInfo bitfields to avoid shared-byte RMW races
+BENTROK 1d306ec6d35a usb: typec: tcpm: fix debug accessory mode detection for sink ports
+BENTROK a9e86a72afda arm64: errata: Factor out broken AMU const counter cap
+BENTROK 00ef8d9b686b arm64: errata: Add Cortex-A725 erratum 3821522 workaround
+ABI 70fa2bec352d tty: abort break signalling on hangup
+ADA abfa3cf28939 HID: core: introduce hid_safe_input_report()
+ADA c5475ec65fd4 HID: uhid: convert to hid_safe_input_report()
+ABI b09071e2f846 strparser: make sure __strp_recv isn't running before tearing down the parser
+ABI e98f88d16813 can: fix unique skb identifier regression under RPS
+ADA 85e6df6e9cd4 tracing: Set the trace clock before registering the histogram trigger
+BENTROK a56a9c6b13a5 mm/mremap: fix locked_vm leak from MREMAP_DONTUNMAP self-merge
+ABI 1e8dc1273a92 net: team: Remove unused team_mode_op, port_enabled
+ABI a2fb09c70264 net: team: Rename port_disabled team mode op to port_tx_disabled
+TERGANTUNG d61bf3bc17de net: team: fix NULL pointer dereference in team_xmit during mode change
+TERGANTUNG 13be794844e3 net: team: stop reusing skb after queue override
+BENTROK 6c826a2ea536 netfilter: nf_tables: fix crash when nf_trace is enabled
+ABI 718be204b941 xfrm: prevent policy_hthresh.work from racing with netns teardown
+ABI d60336cf378b xfs: log items should have a xlog pointer, not a mount
+ABI ef3875e19a10 xfs: remove xfs_buf_t typedef
+BENTROK 4736b0666dcc xfs: rearrange code in xfs_buf_item.c
+BENTROK 8f9237e79819 xfs: factor out stale buffer item completion
+BENTROK d790bd61ca5c xfs: fix unmount hang with unflushable inodes stuck in the AIL
+ABI 512890b5e4ba clone: add CLONE_AUTOREAP
+ABI 0a3e5816c8a3 exit: fix lost-update race on the child_subreaper bitfields
+ABI 831e26cc2004 net: initialize net->net_cookie at netns setup
+ABI f7def717c06a fsnotify: prevent mark additions during connector teardown
+ADA eba0a6365a0f tracing/histograms: Reject non-stacktrace fields for synthetic stacktrace fields
+ABI 092e14e1479a unicode: free the map after a grace period
+ABI 05ca3ce6a58d dm-integrity: require stable writes for internal hash modes
+ABI 096b5d4b80d1 futex: Fix mm reuse handling for FUT_OFF_MMSHARED
+ABI 9ebe824d5598 keys: make keyring indexes independent of kernel addresses
+ABI 253cff052678 xen-blkback: Avoid UAF when reading I/O statistics

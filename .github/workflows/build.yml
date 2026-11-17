@@ -119,28 +119,14 @@ jobs:
         run: |
           set -euo pipefail
           git clone --depth=1 -b "$KERNEL_BRANCH" "$ACK_REPO" kernel
-          # Percobaan "stableNNN": naikkan sublevel ke 5.10.NNN dengan patch inkremental kernel.org,
-          # mendahului Google. Diterapkan sebelum patch lain supaya konflik terlihat murni.
+          # Percobaan "stableNNN": naikkan sublevel ke 5.10.NNN mendahului Google, memakai
+          # stable/5.10.NNN.patch (commit kernel.org yang sudah disaring, lihat stable/SOURCE.txt).
+          # Patch itu dibuat untuk satu commit ACK tertentu; kalau ACK sudah bergerak, git apply
+          # gagal dan build berhenti di sini.
           for e in $EXPERIMENTS; do
             case "$e" in stable[0-9]*) ;; *) continue ;; esac
-            cd kernel
-            cur=$(awk '/^SUBLEVEL/{print $3}' Makefile)
-            while [ "$cur" -lt "${e#stable}" ]; do
-              next=$((cur + 1))
-              echo "== kernel.org 5.10.$cur -> 5.10.$next"
-              curl -fsSL "https://cdn.kernel.org/pub/linux/kernel/v5.x/incr/patch-5.10.$cur-$next.xz" | xz -d > ../incr.patch
-              # -N: lewati hunk yang sudah dimasukkan Google lebih dulu; sisanya yang gagal jadi .rej.
-              patch -p1 -N < ../incr.patch || true
-              cur=$next
-            done
-            rej=$(find . -name '*.rej')
-            if [ -n "$rej" ]; then
-              echo "::error::Patch kernel.org bentrok dengan ACK:"; echo "$rej"
-              for r in $rej; do echo "---- $r"; cat "$r"; done
-              exit 1
-            fi
-            find . -name '*.orig' -delete
-            [ "$(awk '/^SUBLEVEL/{print $3}' Makefile)" = "${e#stable}" ]
+            git -C kernel apply --whitespace=nowarn "$PWD/repo/stable/5.10.${e#stable}.patch"
+            [ "$(awk '/^SUBLEVEL/{print $3}' kernel/Makefile)" = "${e#stable}" ]
           done
 
       - name: Tambahkan SukiSU Ultra
@@ -242,6 +228,13 @@ jobs:
           export PATH="$PWD/clang/bin:$PATH"
           cd kernel
           make -j"$(nproc)" $MAKE_ARGS Image
+          # Modul vendor garnet hanya dimuat kalau CRC tiap simbol yang dipakainya sama persis
+          # dengan kernel (MODVERSIONS). Daftarnya di abi/ (lihat abi/SOURCE.txt).
+          awk 'NR==FNR { crc[$2] = $1; next }
+               !($2 in crc) { print "HILANG " $2; bad++; next }
+               crc[$2] != $1 { print "BEDA   " $2 " vendor=" $1 " kernel=" crc[$2]; bad++ }
+               END { printf "Simbol vendor diperiksa: %d, tidak cocok: %d\n", FNR, bad; exit bad > 0 }' \
+            out/vmlinux.symvers ../repo/abi/garnet-vendor-boot.crc
           release=$(make -s $MAKE_ARGS kernelrelease)
           kver=$(make -s $MAKE_ARGS kernelversion)
           susfs_version=$(sed -n 's/^#define SUSFS_VERSION "\(.*\)"/\1/p' include/linux/susfs.h)

@@ -1,0 +1,21 @@
+5.10.274.patch
+  Commit kernel.org v5.10.272..v5.10.274 (521 commit) yang dimasukkan ke ACK sebelum Google
+  melakukannya. Dipakai lewat percobaan "stable274" di workflow, dengan
+  kernel_branch=android12-5.10-lts.
+
+  Dasar: android12-5.10-lts @ 694b971462 (5.10.272). Patch ini hanya berlaku untuk commit
+  itu. Kalau cabang ACK bergerak, git apply gagal; saat itu periksa dulu apakah Google sudah
+  memasukkan 273/274 sendiri, karena kalau sudah, patch ini tidak dibutuhkan lagi.
+
+  Cara membuatnya: tiap commit di-cherry-pick satu per satu ke ACK. Hasil: 463 masuk.
+  Yang tidak masuk ada di 5.10.274-dilewati.txt:
+    ABI         mengubah isi struct/union/enum di file header. Perubahan seperti itu mengubah
+                CRC simbol atau tata letak yang dipakai modul vendor, sehingga modul ditolak.
+    BENTROK     tidak cocok dengan kode ACK (ACK sudah berbeda di bagian itu).
+    TERGANTUNG  butuh commit yang berstatus ABI/BENTROK.
+    ADA         sudah dimasukkan Google lebih dulu.
+
+  Jadi kernel ini melaporkan 5.10.274 tetapi bukan 274 utuh: perbaikan pada daftar di atas
+  tidak ikut (keadaannya sama seperti di 5.10.272).
+
+  Pengaman: build membandingkan CRC simbol dengan modul vendor garnet (abi/SOURCE.txt).
