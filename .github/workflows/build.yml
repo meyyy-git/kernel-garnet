@@ -117,7 +117,31 @@ jobs:
       - name: Ambil source kernel (Google ACK)
         if: steps.ver.outputs.skip != 'true'
         run: |
+          set -euo pipefail
           git clone --depth=1 -b "$KERNEL_BRANCH" "$ACK_REPO" kernel
+          # Percobaan "stableNNN": naikkan sublevel ke 5.10.NNN dengan patch inkremental kernel.org,
+          # mendahului Google. Diterapkan sebelum patch lain supaya konflik terlihat murni.
+          for e in $EXPERIMENTS; do
+            case "$e" in stable[0-9]*) ;; *) continue ;; esac
+            cd kernel
+            cur=$(awk '/^SUBLEVEL/{print $3}' Makefile)
+            while [ "$cur" -lt "${e#stable}" ]; do
+              next=$((cur + 1))
+              echo "== kernel.org 5.10.$cur -> 5.10.$next"
+              curl -fsSL "https://cdn.kernel.org/pub/linux/kernel/v5.x/incr/patch-5.10.$cur-$next.xz" | xz -d > ../incr.patch
+              # -N: lewati hunk yang sudah dimasukkan Google lebih dulu; sisanya yang gagal jadi .rej.
+              patch -p1 -N < ../incr.patch || true
+              cur=$next
+            done
+            rej=$(find . -name '*.rej')
+            if [ -n "$rej" ]; then
+              echo "::error::Patch kernel.org bentrok dengan ACK:"; echo "$rej"
+              for r in $rej; do echo "---- $r"; cat "$r"; done
+              exit 1
+            fi
+            find . -name '*.orig' -delete
+            [ "$(awk '/^SUBLEVEL/{print $3}' Makefile)" = "${e#stable}" ]
+          done
 
       - name: Tambahkan SukiSU Ultra
         if: steps.ver.outputs.skip != 'true'
@@ -165,6 +189,7 @@ jobs:
           # ADIOS asli crash di 5.10 (NULL data->hctx di limit_depth); pastikan versi yang diperbaiki.
           ! grep -q 'to_word_depth' block/adios.c
           for e in $EXPERIMENTS; do
+            case "$e" in stable[0-9]*) continue ;; esac
             [ -f "../repo/experiments/$e.patch" ] || [ -f "../repo/experiments/$e.config" ] \
               || { echo "Percobaan tidak dikenal: $e"; exit 1; }
             if [ -f "../repo/experiments/$e.patch" ]; then
