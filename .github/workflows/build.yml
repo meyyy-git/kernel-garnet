@@ -227,7 +227,7 @@ jobs:
           set -euo pipefail
           export PATH="$PWD/clang/bin:$PATH"
           cd kernel
-          make -j"$(nproc)" $MAKE_ARGS Image
+          make -k -j"$(nproc)" $MAKE_ARGS Image
           # Modul vendor garnet hanya dimuat kalau CRC tiap simbol yang dipakainya sama persis
           # dengan kernel (MODVERSIONS). Daftarnya di abi/ (lihat abi/SOURCE.txt).
           awk 'NR==FNR { crc[$2] = $1; next }

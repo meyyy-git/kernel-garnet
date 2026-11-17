@@ -26,6 +26,7 @@ ABI 134ef30a6262 USB: cdc-acm: fix racy TIOCMIWAIT implementation
 ABI 3c73c261bc97 Bluetooth: hci_core: Fix inquiry cache timestamps on 64-bit systems
 ABI f255e87b4f7e smb: client: split cifsFileInfo bitfields to avoid shared-byte RMW races
 BENTROK 1d306ec6d35a usb: typec: tcpm: fix debug accessory mode detection for sink ports
+TERGANTUNG 96389d05c964 usb: typec: tcpm: constrain TCPM_SOURCING_VBUS event handling
 BENTROK a9e86a72afda arm64: errata: Factor out broken AMU const counter cap
 BENTROK 00ef8d9b686b arm64: errata: Add Cortex-A725 erratum 3821522 workaround
 ABI 70fa2bec352d tty: abort break signalling on hangup
@@ -49,6 +50,7 @@ BENTROK d790bd61ca5c xfs: fix unmount hang with unflushable inodes stuck in the 
 ABI 512890b5e4ba clone: add CLONE_AUTOREAP
 ABI 0a3e5816c8a3 exit: fix lost-update race on the child_subreaper bitfields
 ABI 831e26cc2004 net: initialize net->net_cookie at netns setup
+TERGANTUNG c61431f3b8c9 netlink: avoid hashing the network namespace pointer
 ABI f7def717c06a fsnotify: prevent mark additions during connector teardown
 ADA eba0a6365a0f tracing/histograms: Reject non-stacktrace fields for synthetic stacktrace fields
 ABI 092e14e1479a unicode: free the map after a grace period

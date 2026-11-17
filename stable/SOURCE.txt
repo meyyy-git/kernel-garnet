@@ -7,7 +7,7 @@
   itu. Kalau cabang ACK bergerak, git apply gagal; saat itu periksa dulu apakah Google sudah
   memasukkan 273/274 sendiri, karena kalau sudah, patch ini tidak dibutuhkan lagi.
 
-  Cara membuatnya: tiap commit di-cherry-pick satu per satu ke ACK. Hasil: 463 masuk.
+  Cara membuatnya: tiap commit di-cherry-pick satu per satu ke ACK. Hasil: 461 masuk.
   Yang tidak masuk ada di 5.10.274-dilewati.txt:
     ABI         mengubah isi struct/union/enum di file header. Perubahan seperti itu mengubah
                 CRC simbol atau tata letak yang dipakai modul vendor, sehingga modul ditolak.
